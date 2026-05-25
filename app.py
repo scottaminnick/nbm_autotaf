@@ -89,17 +89,24 @@ if st.button("Generate Dashboard"):
                 else: return "VFR"    
 
             def get_impact_level(cig_ft, vis_sm, wx, wsp, gst):
-                # High Impact = 3
-                high_wx = ["FZRA", "FZDZ", "SQ", "TS", "VCTS", "TSRA", "SG", "SN", "PL", "RAPL", "SNPL", "SHSN"]
-                if cig_ft < 300 or vis_sm < 0.55 or wsp > 29 or gst > 34 or any(w in wx for w in high_wx):
+                # AWC High Impact Thresholds
+                high_wx = ["FZRA", "FZDZ", "SQ", "TS", "VCTS", "TSRA", "SG", "SN", "-SN", "PL", "RAPL", "SNPL", "SHSN"]
+                if (cig_ft < 1000 or 
+                    vis_sm < 3 or 
+                    wsp > 29 or 
+                    gst > 34 or 
+                    any(w in wx for w in high_wx)):
                     return 3
-                # Moderate Impact = 2
-                if 300 <= cig_ft < 500 or 0.55 <= vis_sm < 0.8:
+                
+                # AWC Moderate Impact Thresholds
+                if (1000 <= cig_ft < 3000) or (3 <= vis_sm < 5):
                     return 2
-                # Slight Impact = 1
-                if 500 <= cig_ft < 700 or 0.8 <= vis_sm < 1.55:
+                
+                # AWC Slight Impact Thresholds
+                if (500 <= cig_ft < 1000) or (0.8 <= vis_sm < 3.0):
                     return 1
-                # None = 0
+                
+                # None (MVFR/VFR with no severe weather or high winds)
                 return 0
 
             def get_cloud_coverage(sky_pct, raw_cig, raw_lcb):
