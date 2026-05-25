@@ -10,10 +10,40 @@ st.set_page_config(page_title="NBM Aviation Dashboard", layout="wide")
 st.title("✈️ NBM Terminal Weather Dashboard")
 st.markdown("Pulling live, unparsed 60-hour guidance directly from the NOAA NOMADS supercomputer.")
 
-# --- USER INPUT ---
-user_input = st.text_input("Enter ICAO Codes (comma-separated):", "KDEN, KORD, KJFK")
+# ==========================================
+# 1. PRESET LOCATIONS DICTIONARY
+# ==========================================
+# You can add as many presets as you want here! Just follow the "Name": "ICAO1, ICAO2" format.
+PRESETS = {
+    "Custom (Type your own)": "",
+    "Seattle Hub": "KSEA, KBFI, KPAE, KPWT, KTCM, KGRF, KOLM",
+    "WC Site - Kansas City": "KMCI, KMKC, KOJC, KIXD",
+    "WC Site - Dallas": "KDFW, KDAL, KAFW, KFTW, KGKY",
+    "WC Site - New York/NJ": "KEWR, KJFK, KLGA, KTEB, KMMU",
+    "WC Site - Los Angeles": "KLAX, KBUR, KVNY, KSMO, KLGB",
+    # Simply add your other WC match sites below!
+    # "WC Site - Miami": "KMIA, KFLL, KOPF, KTMB",
+}
+
+# --- USER INPUT UI ---
+# 1. Dropdown for Presets
+selected_preset = st.selectbox("Select a Preset Region:", list(PRESETS.keys()))
+
+# 2. Determine default text for the input box
+if selected_preset == "Custom (Type your own)":
+    default_text = "KDEN, KORD, KJFK"  # A default placeholder if they just want to type
+else:
+    default_text = PRESETS[selected_preset]
+
+# 3. The Text Box (Pre-fills based on dropdown, but remains fully editable!)
+user_input = st.text_input("Enter ICAO Codes (comma-separated):", default_text)
+
+# Clean up the user input into a usable Python list
 icaos = [code.strip().upper() for code in user_input.split(",") if code.strip()]
 
+# ==========================================
+# 2. AUTOMATIC DATA RETRIEVAL VIA NOMADS
+# ==========================================
 if st.button("Generate Dashboard"):
     if not icaos:
         st.warning("Please enter at least one valid ICAO code.")
@@ -222,14 +252,12 @@ if st.button("Generate Dashboard"):
                 legend=dict(yanchor="top", y=1, xanchor="left", x=1.02, bgcolor="rgba(255,255,255,0.8)", bordercolor="black", borderwidth=1)
             )
 
-            # Renders the plot in the web app
             st.plotly_chart(fig, use_container_width=True)
 
             # --- AUTOMATED TAF GENERATOR ---
             st.subheader("Automated NBM TAF Guidance")
             issue_time = init_dt.strftime("%d%H%M") + "Z" if init_dt else "UNKNOWN"
 
-            # Create a string buffer to hold the TAF text
             taf_output_str = ""
 
             for ICAO in icaos:
@@ -249,5 +277,4 @@ if st.button("Generate Dashboard"):
                 
                 taf_output_str += "\n"
 
-            # Render the TAF block in a neat code box
             st.code(taf_output_str, language="text")
