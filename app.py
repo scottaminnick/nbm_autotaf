@@ -16,11 +16,17 @@ st.markdown("Pulling live, unparsed 60-hour guidance directly from the NOAA NOMA
 # You can add as many presets as you want here! Just follow the "Name": "ICAO1, ICAO2" format.
 PRESETS = {
     "Custom (Type your own)": "",
-    "Seattle Hub": "KSEA, KBFI, KPAE, KPWT, KTCM, KGRF, KOLM",
-    "WC Site - Kansas City": "KMCI, KMKC, KOJC, KIXD",
-    "WC Site - Dallas": "KDFW, KDAL, KAFW, KFTW, KGKY",
-    "WC Site - New York/NJ": "KEWR, KJFK, KLGA, KTEB, KMMU",
-    "WC Site - Los Angeles": "KLAX, KBUR, KVNY, KSMO, KLGB",
+    "WC Site - Atlanta": "KATL, KFTY, KPDK, KMGE, KRYY",
+    "WC Site - Boston": "KBOS, KPVD, KMHT, KBED",
+    "WC Site - Dallas": "KDFW, KDAL, KAFW, KFTW, KNFW, KGKY",
+    "WC Site - Houston": "KIAH, KHOU, KSGR, KEFD, KLBX, KGLS, KLVJ, KDWH",
+    "WC Site - Kansas City": "KMCI, KMKC, KIXD, KTOP, KFOE",
+    "WC Site - Los Angeles": "KLAX, KBUR, KLGB, KSNA, KONT, KVNY, KSMO, KSLI, KSBD, KRIV",
+    "WC Site - Miami": "KMIA, KFLL, KFXE, KPBI, KOPF, KHWO, KTMB, KHST",
+    "WC Site - New York/NJ": "KEWR, KJFK, KLGA, KTEB, KHPN, KISP",
+    "WC Site - Philadelphia": "KPHL, KPNE, KILG, KTTN",
+    "WC Site - Santa Clara": "KSFO, KSJC, KOAK, KHAF, KLVK",
+    "WC Site - Seattle": "KSEA, KBFI, KPAE, KPWT, KTCM, KGRF, KOLM",
     # Simply add your other WC match sites below!
     # "WC Site - Miami": "KMIA, KFLL, KOPF, KTMB",
 }
