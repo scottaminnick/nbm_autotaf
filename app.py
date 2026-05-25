@@ -92,16 +92,16 @@ if st.button("Generate Dashboard"):
             def get_impact_level(cig_ft, vis_sm, wx, wsp, gst, lls, trb):
                 # High Impact Thresholds (Includes LLWS > 40 & SVR Turb)
                 high_wx = ["FZRA", "FZDZ", "SQ", "TS", "VCTS", "TSRA", "SG", "SN", "-SN", "PL", "RAPL", "SNPL", "SHSN"]
-                if (cig_ft < 300 or vis_sm < 0.55 or wsp > 29 or gst > 34 or 
+                if (cig_ft < 1000 or vis_sm < 3 or wsp > 29 or gst > 34 or 
                     any(w in wx for w in high_wx) or lls > 40 or trb >= 4):
                     return 3
                 
                 # Moderate Impact Thresholds (Includes LLWS 30-40 & MOD Turb)
-                if (300 <= cig_ft < 500) or (0.55 <= vis_sm < 0.8) or (30 <= lls <= 40) or (2 <= trb <= 3):
+                if (1000 <= cig_ft < 3000) or (3 <= vis_sm < 5) or (30 <= lls <= 40) or (2 <= trb <= 3):
                     return 2
                 
                 # Slight Impact Thresholds (Includes LLWS 20-29 & LGT Turb)
-                if (500 <= cig_ft < 1000) or (0.8 <= vis_sm < 3.0) or (20 <= lls < 30) or (trb == 1):
+                if (3000 <= cig_ft < 5000) or (0.8 <= vis_sm < 3.0) or (20 <= lls < 30) or (trb == 1):
                     return 1
                 
                 # None (MVFR/VFR with no severe weather, calm winds, no LLWS/Turb)
