@@ -98,7 +98,7 @@ if st.button("Generate Dashboard"):
                 if (1000 <= cig_ft < 3000) or (3 <= vis_sm < 5) or (30 <= lls <= 40) or (2 <= trb <= 3):
                     return 2
                 
-                if (500 <= cig_ft < 1000) or (5 <= vis_sm) or (20 <= lls < 30) or (trb == 1):
+                if (3000 <= cig_ft < 5000) or (5 <= vis_sm <= 6) or (20 <= lls < 30) or (trb == 1):
                     return 1
                 
                 return 0
@@ -135,6 +135,118 @@ if st.button("Generate Dashboard"):
                 elif ts_prob >= 20:
                     return "Thunderstorms (VCTS)", "VCTS"
                 else: return "None", ""
+
+            def impact_label(level):
+                labels = {
+                    0: "Little/No Impact",
+                    1: "Low Impact",
+                    2: "Medium Impact",
+                    3: "High Impact"
+                }
+                return labels.get(level, "Unknown")
+
+
+            def impact_color(level):
+                colors = {
+                    0: "#2b2b2b",
+                    1: "#e5e500",
+                    2: "#ff9900",
+                    3: "#ff4c4c"
+                }
+                return colors.get(level, "#cccccc")
+
+
+            def get_primary_driver(cig_ft, vis_sm, taf_wx, wsp, gst, lls, trb):
+                """
+                Returns the main reason a time period is impactful.
+                Priority is intentionally ops-driven, not purely meteorological.
+                """
+                drivers = []
+
+                if "TS" in taf_wx or "VCTS" in taf_wx:
+                    drivers.append(("Thunderstorms", 4))
+                if taf_wx in ["FZRA", "FZDZ", "TSFZRA"]:
+                    drivers.append(("Freezing precip", 4))
+                if "SN" in taf_wx or "PL" in taf_wx:
+                    drivers.append(("Wintry precip", 3))
+                if cig_ft < 1000:
+                    drivers.append(("IFR/LIFR ceilings", 4))
+                elif cig_ft < 3000:
+                    drivers.append(("MVFR ceilings", 2))
+                elif cig_ft < 5000:
+                    drivers.append(("Low VFR ceilings", 1))
+
+                if vis_sm < 3:
+                    drivers.append(("IFR/LIFR visibility", 4))
+                elif vis_sm < 5:
+                    drivers.append(("MVFR visibility", 2))
+
+                if gst >= 35 or wsp >= 30:
+                    drivers.append(("Strong surface winds", 3))
+                elif gst >= 25 or wsp >= 20:
+                    drivers.append(("Gusty winds", 2))
+
+                if lls > 40:
+                    drivers.append(("Significant LLWS", 4))
+                elif lls >= 30:
+                    drivers.append(("LLWS", 3))
+                elif lls >= 20:
+                    drivers.append(("Marginal LLWS", 2))
+
+                if trb >= 4:
+                    drivers.append(("Severe turbulence", 4))
+                elif trb >= 2:
+                    drivers.append(("Moderate turbulence", 3))
+                elif trb == 1:
+                    drivers.append(("Light turbulence", 1))
+
+                if not drivers:
+                    return "None"
+
+                drivers.sort(key=lambda x: x[1], reverse=True)
+                return drivers[0][0]
+
+
+            def get_impact_level_v2(cig_ft, vis_sm, wx, wsp, gst, lls, trb):
+                """
+                Cleaner impact logic for WC outlook use.
+                Avoids treating normal VFR visibility as an impact.
+                """
+                thunder = ("TS" in wx) or ("VCTS" in wx)
+                freezing = any(token in wx for token in ["FZRA", "FZDZ"])
+                winter = any(token in wx for token in ["SN", "PL", "RAPL", "SNPL", "SHSN", "SG"])
+
+                if (
+                    cig_ft < 1000
+                    or vis_sm < 3
+                    or wsp >= 30
+                    or gst >= 35
+                    or freezing
+                    or winter
+                    or thunder
+                    or lls > 40
+                    or trb >= 4
+                ):
+                    return 3
+
+                if (
+                    1000 <= cig_ft < 3000
+                    or 3 <= vis_sm < 5
+                    or 20 <= wsp < 30
+                    or 25 <= gst < 35
+                    or 30 <= lls <= 40
+                    or 2 <= trb <= 3
+                ):
+                    return 2
+
+                if (
+                    3000 <= cig_ft < 5000
+                    or 20 <= lls < 30
+                    or trb == 1
+                ):
+                    return 1
+
+                return 0
 
             all_data = []
 
@@ -236,7 +348,8 @@ if st.button("Generate Dashboard"):
                         cell_wind = f"{cardinal} {wsp}G{gst}" if gst else f"{cardinal} {wsp}"
 
                     flight_cat = get_flight_category(cig_ft, vis_sm)
-                    impact_lvl = get_impact_level(cig_ft, vis_sm, taf_wx, wsp, gst, lls, trb)
+                    impact_lvl = get_impact_level_v2(cig_ft, vis_sm, taf_wx, wsp, gst, lls, trb)
+                    primary_driver = get_primary_driver(cig_ft, vis_sm, taf_wx, wsp, gst, lls, trb)
                     
                     llws_text = f"<br>LLWS: {lld} @ {lls}KT ({llh}ft)" if lls >= 20 else ""
                     turb_text = ""
@@ -263,6 +376,9 @@ if st.button("Generate Dashboard"):
                         "TAF_Wind": taf_wind,
                         "TAF_Vis": taf_vis,
                         "TAF_WX": taf_wx
+                        "Primary Driver": primary_driver,
+                        "Valid Datetime": valid_time if init_dt else None,
+                        "Forecast Hour": int(fhr),
                     })
 
             if not all_data:
@@ -271,20 +387,146 @@ if st.button("Generate Dashboard"):
 
             df = pd.DataFrame(all_data)
 
+            st.divider()
+
+            st.subheader("World Cup Aviation Outlook Controls")
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                time_window = st.selectbox(
+                    "Outlook Window",
+                    ["Full 60-hr NBM", "Day 1: 0–24 hr", "Day 2: 24–48 hr", "Day 3: 48–60 hr"]
+                )
+
+            with col2:
+                min_display_impact = st.selectbox(
+                    "Minimum Impact to Highlight",
+                    [0, 1, 2, 3],
+                    format_func=lambda x: impact_label(x)
+                )
+
+            with col3:
+                show_only_impacts = st.checkbox("Show only impacted airports", value=False)
+
+
+            df_view = df.copy()
+
+            if time_window == "Day 1: 0–24 hr":
+                df_view = df_view[(df_view["Forecast Hour"] >= 0) & (df_view["Forecast Hour"] <= 24)]
+            elif time_window == "Day 2: 24–48 hr":
+                df_view = df_view[(df_view["Forecast Hour"] > 24) & (df_view["Forecast Hour"] <= 48)]
+            elif time_window == "Day 3: 48–60 hr":
+                df_view = df_view[(df_view["Forecast Hour"] > 48) & (df_view["Forecast Hour"] <= 60)]
+
+            if show_only_impacts:
+                impacted_stations = (
+                    df_view.groupby("Station")["Impact Level"]
+                    .max()
+                    .loc[lambda s: s >= min_display_impact]
+                    .index
+                    .tolist()
+                )
+                df_view = df_view[df_view["Station"].isin(impacted_stations)]
+            else:
+                df_view = df_view[df_view["Impact Level"] >= min_display_impact] if min_display_impact > 0 else df_view
+
+            if df_view.empty:
+                st.info("No periods meet the selected impact/filter criteria.")
+                st.stop()
+
+            st.subheader("Match-Site Aviation Impact Summary")
+
+            summary_rows = []
+
+            for station, g in df_view.groupby("Station", sort=False):
+                max_impact = int(g["Impact Level"].max())
+                worst = g[g["Impact Level"] == max_impact]
+
+                drivers = (
+                    worst["Primary Driver"]
+                    .value_counts()
+                    .reset_index()
+                    .rename(columns={"index": "Driver", "Primary Driver": "Count"})
+                )
+
+                primary_driver = worst["Primary Driver"].mode().iloc[0] if not worst.empty else "None"
+                start_time = worst["Zulu Time"].iloc[0] if not worst.empty else "-"
+                end_time = worst["Zulu Time"].iloc[-1] if not worst.empty else "-"
+
+                summary_rows.append({
+                    "Station": station,
+                    "Max Impact": impact_label(max_impact),
+                    "Primary Concern": primary_driver,
+                    "Peak Window": f"{start_time}–{end_time}",
+                    "Max Impact Level": max_impact
+                })
+
+            summary_df = pd.DataFrame(summary_rows)
+
+            st.dataframe(
+                summary_df.drop(columns=["Max Impact Level"]),
+                use_container_width=True,
+                hide_index=True
+            )
+
+        def build_dss_summary(summary_df, selected_preset, time_window):
+            if summary_df.empty:
+                return "No significant aviation weather impacts are indicated in the selected NBM guidance window."
+
+            high = summary_df[summary_df["Max Impact Level"] == 3]
+            med = summary_df[summary_df["Max Impact Level"] == 2]
+            low = summary_df[summary_df["Max Impact Level"] == 1]
+
+    lines = []
+    site_name = selected_preset.replace("WC Site - ", "")
+
+    lines.append(f"{site_name} Aviation Outlook – {time_window}")
+    lines.append("")
+    lines.append("Key Messages:")
+
+    if not high.empty:
+        stations = ", ".join(high["Station"].tolist())
+        hazards = ", ".join(high["Primary Concern"].unique().tolist())
+        lines.append(f"• High aviation impacts are possible at {stations}, mainly due to {hazards}.")
+    if not med.empty:
+        stations = ", ".join(med["Station"].tolist())
+        hazards = ", ".join(med["Primary Concern"].unique().tolist())
+        lines.append(f"• Medium aviation impacts are possible at {stations}, mainly due to {hazards}.")
+    if not low.empty and high.empty:
+        stations = ", ".join(low["Station"].tolist())
+        lines.append(f"• Low-end aviation impacts are possible at {stations}; monitor later guidance for trends.")
+    if high.empty and med.empty and low.empty:
+        lines.append("• Little to no aviation weather impacts are indicated in the selected period.")
+
+    lines.append("")
+    lines.append("Operational Notes:")
+    lines.append("• This guidance is based on NBM terminal data and should be reviewed by a forecaster before partner dissemination.")
+    lines.append("• Use CWSU/WFO coordination for final operational messaging, especially for convection and traffic-flow impacts.")
+
+    return "\n".join(lines)
+
+
+dss_text = build_dss_summary(summary_df, selected_preset, time_window)
+
+st.subheader("DSS Builder Text Draft")
+st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=220)
+            
             # --- PLOTLY VISUALIZATION ---
-            st.subheader("Terminal Impact Matrix (AWC Criteria)")
+            st.subheader("Terminal Impact Matrix (Experimental NBM Guidance)")
             
             # FIXED: Reindex the pivots to ensure they match the user's exact input list (valid_icaos)
-            impact_data = df.pivot(index="Station", columns="Zulu Time", values="Impact Level")
-            impact_data = impact_data.reindex(valid_icaos)[df["Zulu Time"].unique().tolist()]
+            impact_data = df_view.pivot(index="Station", columns="Zulu Time", values="Impact Level")
+            impact_data = impact_data.reindex(valid_icaos)[df_view["Zulu Time"].unique().tolist()]
+            valid_view_icaos = [icao for icao in valid_icaos if icao in df_view["Station"].unique()]
 
             cell_text_data = df.pivot(index="Station", columns="Zulu Time", values="Cell Text")
-            cell_text_data = cell_text_data.reindex(valid_icaos)[df["Zulu Time"].unique().tolist()]
+            cell_text_data = cell_text_data.reindex(valid_icaos)[df_view["Zulu Time"].unique().tolist()]
 
             hover_data = df.pivot(index="Station", columns="Zulu Time", values="Flight Category")
             hover_data = hover_data.reindex(valid_icaos)[df["Zulu Time"].unique().tolist()]
 
-            for i, row in df.iterrows():
+            for i, row in df_view.iterrows():
                 hover_data.loc[row["Station"], row["Zulu Time"]] = (
                     f"<b>Valid: {row['Zulu Time']}</b><br>"
                     f"<b>{row['Flight Category']}</b><br>"
@@ -354,7 +596,5 @@ if st.button("Generate Dashboard"):
                         prev_taf_line = conditions
                 
                 taf_output_str += "\n"
-
-            st.code(taf_output_str, language="text")
 
             st.code(taf_output_str, language="text")
