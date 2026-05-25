@@ -59,6 +59,7 @@ if st.button("Generate Dashboard"):
                 date_str = check_time.strftime("%Y%m%d")
                 hour_str = check_time.strftime("%H")
                 
+                # We point to the primary NBS text product 
                 url = f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/prod/blend.{date_str}/{hour_str}/text/blend_nbstx.t{hour_str}z"
                 
                 try:
@@ -88,25 +89,22 @@ if st.button("Generate Dashboard"):
                 elif cig_ft <= 3000 or vis_sm <= 5.0: return "MVFR"   
                 else: return "VFR"    
 
-            def get_impact_level(cig_ft, vis_sm, wx, wsp, gst):
-                # AWC High Impact Thresholds
+            def get_impact_level(cig_ft, vis_sm, wx, wsp, gst, lls, trb):
+                # High Impact Thresholds (Includes LLWS > 40 & SVR Turb)
                 high_wx = ["FZRA", "FZDZ", "SQ", "TS", "VCTS", "TSRA", "SG", "SN", "-SN", "PL", "RAPL", "SNPL", "SHSN"]
-                if (cig_ft < 1000 or 
-                    vis_sm < 3 or 
-                    wsp > 29 or 
-                    gst > 34 or 
-                    any(w in wx for w in high_wx)):
+                if (cig_ft < 300 or vis_sm < 0.55 or wsp > 29 or gst > 34 or 
+                    any(w in wx for w in high_wx) or lls > 40 or trb >= 4):
                     return 3
                 
-                # AWC Moderate Impact Thresholds
-                if (1000 <= cig_ft < 3000) or (3 <= vis_sm < 5):
+                # Moderate Impact Thresholds (Includes LLWS 30-40 & MOD Turb)
+                if (300 <= cig_ft < 500) or (0.55 <= vis_sm < 0.8) or (30 <= lls <= 40) or (2 <= trb <= 3):
                     return 2
                 
-                # AWC Slight Impact Thresholds
-                if (500 <= cig_ft < 1000) or (0.8 <= vis_sm < 3.0):
+                # Slight Impact Thresholds (Includes LLWS 20-29 & LGT Turb)
+                if (500 <= cig_ft < 1000) or (0.8 <= vis_sm < 3.0) or (20 <= lls < 30) or (trb == 1):
                     return 1
                 
-                # None (MVFR/VFR with no severe weather or high winds)
+                # None (MVFR/VFR with no severe weather, calm winds, no LLWS/Turb)
                 return 0
 
             def get_cloud_coverage(sky_pct, raw_cig, raw_lcb):
@@ -178,6 +176,12 @@ if st.button("Generate Dashboard"):
                 pzr_list = parsed_data.get('PZR', [])
                 t03_list = parsed_data.get('T03', []) 
                 
+                # New Aviation Variables
+                lls_list = parsed_data.get('LLS', [])
+                lld_list = parsed_data.get('LLD', [])
+                llh_list = parsed_data.get('LLH', [])
+                trb_list = parsed_data.get('LLT', parsed_data.get('TRB', [])) # Pulls LLT or TRB safely
+                
                 for i in range(len(fhr_list)):
                     fhr = fhr_list[i]
                     
@@ -210,7 +214,20 @@ if st.button("Generate Dashboard"):
                     wsp = int(wsp_list[i]) if i < len(wsp_list) and wsp_list[i] else 0
                     gst = int(gst_list[i]) if i < len(gst_list) and gst_list[i] else 0
                     
-                    # Format Wind for TAF and Cell
+                    # Safely Parse LLWS and Turbulence
+                    lls_raw = lls_list[i] if i < len(lls_list) else ""
+                    lls = int(lls_raw) if lls_raw and lls_raw.strip('-').isdigit() else 0
+
+                    lld_raw = lld_list[i] if i < len(lld_list) else ""
+                    lld = f"{int(lld_raw)*10:03d}" if lld_raw and lld_raw.strip('-').isdigit() else "VRB"
+
+                    llh_raw = llh_list[i] if i < len(llh_list) else ""
+                    llh = int(llh_raw) * 100 if llh_raw and llh_raw.strip('-').isdigit() else 0
+
+                    trb_raw = trb_list[i] if i < len(trb_list) else ""
+                    trb = int(trb_raw) if trb_raw and trb_raw.strip('-').isdigit() else 0
+                    
+                    # Formatting Strings for the Grid
                     cardinal = deg_to_cardinal(wdr)
                     if wsp == 0:
                         taf_wind = "00000KT"
@@ -221,11 +238,20 @@ if st.button("Generate Dashboard"):
                         cell_wind = f"{cardinal} {wsp}G{gst}" if gst else f"{cardinal} {wsp}"
 
                     flight_cat = get_flight_category(cig_ft, vis_sm)
-                    impact_lvl = get_impact_level(cig_ft, vis_sm, taf_wx, wsp, gst)
+                    impact_lvl = get_impact_level(cig_ft, vis_sm, taf_wx, wsp, gst, lls, trb)
                     
-                    # Format the text that will appear directly inside the cell
+                    # LLWS and Turb Only Display if Active (>=20 knots or >=1 Turb)
+                    llws_text = f"<br>LLWS: {lld} @ {lls}KT ({llh}ft)" if lls >= 20 else ""
+                    
+                    turb_text = ""
+                    if trb == 4: turb_text = "<br>Turb: SVR"
+                    elif trb >= 2: turb_text = "<br>Turb: MOD"
+                    elif trb == 1: turb_text = "<br>Turb: LGT"
+                    
                     cell_wx = taf_wx if taf_wx else "--"
-                    cell_text = f"<b>{flight_cat}</b><br>{cell_wx}<br>{cell_wind}"
+                    
+                    # Stack all active variables into the dashboard block
+                    cell_text = f"<b>{flight_cat}</b><br>{cell_wx}<br>{cell_wind}{llws_text}{turb_text}"
                     
                     all_data.append({
                         "Station": ICAO,
@@ -235,6 +261,8 @@ if st.button("Generate Dashboard"):
                         "Visibility": f"{vis_sm} SM",
                         "Weather": wx_desc,
                         "Wind": f"{wdr}° @ {wsp} kts" + (f" G{gst}" if gst else ""),
+                        "LLWS": f"{lld} @ {lls}KT ({llh}ft)" if lls >= 20 else "None",
+                        "Turbulence": "Severe" if trb == 4 else ("Moderate" if trb >= 2 else ("Light" if trb == 1 else "None")),
                         "Impact Level": impact_lvl,
                         "Flight Category": flight_cat,
                         "Cell Text": cell_text,
@@ -252,7 +280,6 @@ if st.button("Generate Dashboard"):
             # --- PLOTLY VISUALIZATION ---
             st.subheader("Terminal Impact Matrix (AWC Criteria)")
             
-            # Pivot tables for the different layers of the map
             impact_data = df.pivot(index="Station", columns="Zulu Time", values="Impact Level")
             impact_data = impact_data[df["Zulu Time"].unique().tolist()] 
 
@@ -269,10 +296,11 @@ if st.button("Generate Dashboard"):
                     f"Clouds: {row['Clouds']}<br>"
                     f"Vis: {row['Visibility']}<br>"
                     f"WX: {row['Weather']}<br>"
-                    f"Wind: {row['Wind']}"
+                    f"Wind: {row['Wind']}<br>"
+                    f"LLWS: {row['LLWS']}<br>"
+                    f"Turb: {row['Turbulence']}"
                 )
 
-            # Updated Color Scale matching AWC (None=Dark Grey, Slight=Yellow, Mod=Orange, High=Red)
             colorscale = [
                 [0.0, "#2b2b2b"], # None
                 [0.33, "#e5e500"], # Slight 
@@ -280,16 +308,16 @@ if st.button("Generate Dashboard"):
                 [1.0, "#ff4c4c"]  # High 
             ]
 
-            # Increased plot height to accommodate the 3 lines of text
-            plot_height = max(350, len(icaos) * 100 + 100)
+            # Dynamic height allocation (Taller cells accommodate extra LLWS/Turb text lines)
+            plot_height = max(350, len(icaos) * 120 + 100)
 
             fig = go.Figure(data=go.Heatmap(
                 z=impact_data.values, 
                 x=impact_data.columns, 
                 y=impact_data.index,
                 text=cell_text_data.values,
-                texttemplate="%{text}",    # Injects our formatted cell_text directly into the block
-                textfont={"size": 11},     # Ensures text fits in the blocks
+                texttemplate="%{text}",    
+                textfont={"size": 11},     
                 hovertext=hover_data.values,
                 hoverinfo="text",
                 colorscale=colorscale, 
