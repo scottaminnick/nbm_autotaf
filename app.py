@@ -31,20 +31,14 @@ PRESETS = {
     # "WC Site - Miami": "KMIA, KFLL, KOPF, KTMB",
 }
 
-# --- USER INPUT UI ---
-# 1. Dropdown for Presets
 selected_preset = st.selectbox("Select a Preset Region:", list(PRESETS.keys()))
 
-# 2. Determine default text for the input box
 if selected_preset == "Custom (Type your own)":
-    default_text = "KDEN, KORD, KJFK"  # A default placeholder if they just want to type
+    default_text = "KDEN, KORD, KJFK"  
 else:
     default_text = PRESETS[selected_preset]
 
-# 3. The Text Box (Pre-fills based on dropdown, but remains fully editable!)
 user_input = st.text_input("Enter ICAO Codes (comma-separated):", default_text)
-
-# Clean up the user input into a usable Python list
 icaos = [code.strip().upper() for code in user_input.split(",") if code.strip()]
 
 # ==========================================
@@ -60,7 +54,6 @@ if st.button("Generate Dashboard"):
             full_nbm_text = None
             init_dt = None
 
-            # Look back up to 24 hours to find the latest published run
             for i in range(24):
                 check_time = now - timedelta(hours=i)
                 date_str = check_time.strftime("%Y%m%d")
@@ -83,11 +76,31 @@ if st.button("Generate Dashboard"):
                 st.stop()
 
             # --- PARSING & LOGIC ---
+            def deg_to_cardinal(d):
+                if not isinstance(d, int): return "VRB"
+                dirs = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+                ix = round(d / 22.5) % 16
+                return dirs[ix]
+
             def get_flight_category(cig_ft, vis_sm):
-                if cig_ft < 500 or vis_sm < 1.0: return 0, "LIFR"   
-                elif cig_ft < 1000 or vis_sm < 3.0: return 1, "IFR"    
-                elif cig_ft <= 3000 or vis_sm <= 5.0: return 2, "MVFR"   
-                else: return 3, "VFR"    
+                if cig_ft < 500 or vis_sm < 1.0: return "LIFR"   
+                elif cig_ft < 1000 or vis_sm < 3.0: return "IFR"    
+                elif cig_ft <= 3000 or vis_sm <= 5.0: return "MVFR"   
+                else: return "VFR"    
+
+            def get_impact_level(cig_ft, vis_sm, wx, wsp, gst):
+                # High Impact = 3
+                high_wx = ["FZRA", "FZDZ", "SQ", "TS", "VCTS", "TSRA", "SG", "SN", "PL", "RAPL", "SNPL", "SHSN"]
+                if cig_ft < 300 or vis_sm < 0.55 or wsp > 29 or gst > 34 or any(w in wx for w in high_wx):
+                    return 3
+                # Moderate Impact = 2
+                if 300 <= cig_ft < 500 or 0.55 <= vis_sm < 0.8:
+                    return 2
+                # Slight Impact = 1
+                if 500 <= cig_ft < 700 or 0.8 <= vis_sm < 1.55:
+                    return 1
+                # None = 0
+                return 0
 
             def get_cloud_coverage(sky_pct, raw_cig, raw_lcb):
                 sky = int(sky_pct) if sky_pct else 0
@@ -176,8 +189,8 @@ if st.button("Generate Dashboard"):
                     cig_ft = int(raw_cig) * 100 if raw_cig and not raw_cig.startswith('-') else 10000
 
                     raw_vis = vis_list[i] if i < len(vis_list) else ""
-                    vis_sm = int(raw_vis) / 10.0 if raw_vis else 10.0
-                    taf_vis = "P6SM" if vis_sm > 6 else f"{int(vis_sm) if vis_sm.is_integer() else vis_sm}SM"
+                    vis_sm = round(int(raw_vis) / 10.0, 2) if raw_vis else 10.0
+                    taf_vis = "P6SM" if vis_sm > 6 else f"{int(vis_sm) if float(vis_sm).is_integer() else vis_sm}SM"
                     
                     pra = pra_list[i] if i < len(pra_list) else ""
                     psn = psn_list[i] if i < len(psn_list) else ""
@@ -186,15 +199,26 @@ if st.button("Generate Dashboard"):
                     
                     wx_desc, taf_wx = get_weather(pra, psn, pzr, t03)
                     
-                    wdr = f"{int(wdr_list[i])*10:03d}" if i < len(wdr_list) and wdr_list[i] else "VRB"
+                    wdr = int(wdr_list[i])*10 if i < len(wdr_list) and wdr_list[i] else "VRB"
                     wsp = int(wsp_list[i]) if i < len(wsp_list) and wsp_list[i] else 0
                     gst = int(gst_list[i]) if i < len(gst_list) and gst_list[i] else 0
-                    wind_desc = f"{wdr}° @ {wsp} kts" + (f" G{gst}" if gst else "")
                     
-                    if wsp == 0: taf_wind = "00000KT"
-                    else: taf_wind = f"{wdr}{wsp:02d}G{gst:02d}KT" if gst else f"{wdr}{wsp:02d}KT"
+                    # Format Wind for TAF and Cell
+                    cardinal = deg_to_cardinal(wdr)
+                    if wsp == 0:
+                        taf_wind = "00000KT"
+                        cell_wind = "calm"
+                    else:
+                        wdr_str = f"{wdr:03d}" if isinstance(wdr, int) else "VRB"
+                        taf_wind = f"{wdr_str}{wsp:02d}G{gst:02d}KT" if gst else f"{wdr_str}{wsp:02d}KT"
+                        cell_wind = f"{cardinal} {wsp}G{gst}" if gst else f"{cardinal} {wsp}"
 
-                    cat_value, cat_name = get_flight_category(cig_ft, vis_sm)
+                    flight_cat = get_flight_category(cig_ft, vis_sm)
+                    impact_lvl = get_impact_level(cig_ft, vis_sm, taf_wx, wsp, gst)
+                    
+                    # Format the text that will appear directly inside the cell
+                    cell_wx = taf_wx if taf_wx else "--"
+                    cell_text = f"<b>{flight_cat}</b><br>{cell_wx}<br>{cell_wind}"
                     
                     all_data.append({
                         "Station": ICAO,
@@ -203,9 +227,10 @@ if st.button("Generate Dashboard"):
                         "Clouds": cloud_str,
                         "Visibility": f"{vis_sm} SM",
                         "Weather": wx_desc,
-                        "Wind": wind_desc,
-                        "Category Value": cat_value,
-                        "Flight Category": cat_name,
+                        "Wind": f"{wdr}° @ {wsp} kts" + (f" G{gst}" if gst else ""),
+                        "Impact Level": impact_lvl,
+                        "Flight Category": flight_cat,
+                        "Cell Text": cell_text,
                         "TAF_Wind": taf_wind,
                         "TAF_Vis": taf_vis,
                         "TAF_WX": taf_wx
@@ -218,16 +243,20 @@ if st.button("Generate Dashboard"):
             df = pd.DataFrame(all_data)
 
             # --- PLOTLY VISUALIZATION ---
-            st.subheader("Interactive Flight Category Heatmap")
+            st.subheader("Terminal Impact Matrix (AWC Criteria)")
             
-            heatmap_data = df.pivot(index="Station", columns="Zulu Time", values="Category Value")
-            heatmap_data = heatmap_data[df["Zulu Time"].unique().tolist()] 
+            # Pivot tables for the different layers of the map
+            impact_data = df.pivot(index="Station", columns="Zulu Time", values="Impact Level")
+            impact_data = impact_data[df["Zulu Time"].unique().tolist()] 
 
-            hover_text = df.pivot(index="Station", columns="Zulu Time", values="Flight Category")
-            hover_text = hover_text[df["Zulu Time"].unique().tolist()] 
+            cell_text_data = df.pivot(index="Station", columns="Zulu Time", values="Cell Text")
+            cell_text_data = cell_text_data[df["Zulu Time"].unique().tolist()] 
+
+            hover_data = df.pivot(index="Station", columns="Zulu Time", values="Flight Category")
+            hover_data = hover_data[df["Zulu Time"].unique().tolist()] 
 
             for i, row in df.iterrows():
-                hover_text.loc[row["Station"], row["Zulu Time"]] = (
+                hover_data.loc[row["Station"], row["Zulu Time"]] = (
                     f"<b>Valid: {row['Zulu Time']}</b><br>"
                     f"<b>{row['Flight Category']}</b><br>"
                     f"Clouds: {row['Clouds']}<br>"
@@ -236,17 +265,33 @@ if st.button("Generate Dashboard"):
                     f"Wind: {row['Wind']}"
                 )
 
-            colorscale = [[0.0, "magenta"], [0.33, "red"], [0.66, "blue"], [1.0, "green"]]
-            plot_height = max(250, len(icaos) * 60 + 100)
+            # Updated Color Scale matching AWC (None=Dark Grey, Slight=Yellow, Mod=Orange, High=Red)
+            colorscale = [
+                [0.0, "#2b2b2b"], # None
+                [0.33, "#e5e500"], # Slight 
+                [0.66, "#ff9900"], # Moderate
+                [1.0, "#ff4c4c"]  # High 
+            ]
+
+            # Increased plot height to accommodate the 3 lines of text
+            plot_height = max(350, len(icaos) * 100 + 100)
 
             fig = go.Figure(data=go.Heatmap(
-                z=heatmap_data.values, x=heatmap_data.columns, y=heatmap_data.index,
-                text=hover_text.values, hoverinfo="text",
-                colorscale=colorscale, showscale=False,
-                zmin=0, zmax=3, xgap=2, ygap=2  
+                z=impact_data.values, 
+                x=impact_data.columns, 
+                y=impact_data.index,
+                text=cell_text_data.values,
+                texttemplate="%{text}",    # Injects our formatted cell_text directly into the block
+                textfont={"size": 11},     # Ensures text fits in the blocks
+                hovertext=hover_data.values,
+                hoverinfo="text",
+                colorscale=colorscale, 
+                showscale=False,
+                zmin=0, zmax=3, 
+                xgap=2, ygap=2  
             ))
 
-            legend_items = {"VFR": "green", "MVFR": "blue", "IFR": "red", "LIFR": "magenta"}
+            legend_items = {"None": "#2b2b2b", "Slight": "#e5e500", "Moderate": "#ff9900", "High": "#ff4c4c"}
             for label, color in legend_items.items():
                 fig.add_trace(go.Scatter(
                     x=[None], y=[None], mode="markers",
@@ -255,7 +300,7 @@ if st.button("Generate Dashboard"):
 
             fig.update_layout(
                 plot_bgcolor="white", height=plot_height, margin=dict(l=10, r=10, t=10, b=10),
-                legend=dict(yanchor="top", y=1, xanchor="left", x=1.02, bgcolor="rgba(255,255,255,0.8)", bordercolor="black", borderwidth=1)
+                legend=dict(title="<b>Impact Level</b>", yanchor="top", y=1, xanchor="left", x=1.02, bgcolor="rgba(255,255,255,0.8)", bordercolor="black", borderwidth=1)
             )
 
             st.plotly_chart(fig, use_container_width=True)
