@@ -478,39 +478,38 @@ if st.button("Generate Dashboard"):
             med = summary_df[summary_df["Max Impact Level"] == 2]
             low = summary_df[summary_df["Max Impact Level"] == 1]
 
-    lines = []
-    site_name = selected_preset.replace("WC Site - ", "")
+            lines = []
+            site_name = selected_preset.replace("WC Site - ", "")
 
-    lines.append(f"{site_name} Aviation Outlook – {time_window}")
-    lines.append("")
-    lines.append("Key Messages:")
+            lines.append(f"{site_name} Aviation Outlook – {time_window}")
+            lines.append("")
+            lines.append("Key Messages:")
 
-    if not high.empty:
-        stations = ", ".join(high["Station"].tolist())
-        hazards = ", ".join(high["Primary Concern"].unique().tolist())
-        lines.append(f"• High aviation impacts are possible at {stations}, mainly due to {hazards}.")
-    if not med.empty:
-        stations = ", ".join(med["Station"].tolist())
-        hazards = ", ".join(med["Primary Concern"].unique().tolist())
-        lines.append(f"• Medium aviation impacts are possible at {stations}, mainly due to {hazards}.")
-    if not low.empty and high.empty:
-        stations = ", ".join(low["Station"].tolist())
-        lines.append(f"• Low-end aviation impacts are possible at {stations}; monitor later guidance for trends.")
-    if high.empty and med.empty and low.empty:
-        lines.append("• Little to no aviation weather impacts are indicated in the selected period.")
+            if not high.empty:
+                stations = ", ".join(high["Station"].tolist())
+                hazards = ", ".join(high["Primary Concern"].unique().tolist())
+                lines.append(f"• High aviation impacts are possible at {stations}, mainly due to {hazards}.")
+            if not med.empty:
+                stations = ", ".join(med["Station"].tolist())
+                hazards = ", ".join(med["Primary Concern"].unique().tolist())
+                lines.append(f"• Medium aviation impacts are possible at {stations}, mainly due to {hazards}.")
+            if not low.empty and high.empty:
+                stations = ", ".join(low["Station"].tolist())
+                lines.append(f"• Low-end aviation impacts are possible at {stations}; monitor later guidance for trends.")
+            if high.empty and med.empty and low.empty:
+                lines.append("• Little to no aviation weather impacts are indicated in the selected period.")
 
-    lines.append("")
-    lines.append("Operational Notes:")
-    lines.append("• This guidance is based on NBM terminal data and should be reviewed by a forecaster before partner dissemination.")
-    lines.append("• Use CWSU/WFO coordination for final operational messaging, especially for convection and traffic-flow impacts.")
+            lines.append("")
+            lines.append("Operational Notes:")
+            lines.append("• This guidance is based on NBM terminal data and should be reviewed by a forecaster before partner dissemination.")
+            lines.append("• Use CWSU/WFO coordination for final operational messaging, especially for convection and traffic-flow impacts.")
 
-    return "\n".join(lines)
+            return "\n".join(lines)
 
+        dss_text = build_dss_summary(summary_df, selected_preset, time_window)
 
-dss_text = build_dss_summary(summary_df, selected_preset, time_window)
-
-st.subheader("DSS Builder Text Draft")
-st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=220)
+        st.subheader("DSS Builder Text Draft")
+        st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=220)
             
             # --- PLOTLY VISUALIZATION ---
             st.subheader("Terminal Impact Matrix (Experimental NBM Guidance)")
@@ -575,7 +574,8 @@ st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=220)
             st.plotly_chart(fig, use_container_width=True)
 
             # --- AUTOMATED TAF GENERATOR ---
-            st.subheader("Automated NBM TAF Guidance")
+            st.subheader("Experimental NBM TAF Guidance")
+            st.caption("Not an official TAF. Use for situational awareness and forecaster review only.")
             issue_time = init_dt.strftime("%d%H%M") + "Z" if init_dt else "UNKNOWN"
 
             taf_output_str = ""
@@ -598,3 +598,17 @@ st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=220)
                 taf_output_str += "\n"
 
             st.code(taf_output_str, language="text")
+
+        st.download_button(
+            label="Download Full Parsed Data CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name="nbm_terminal_guidance_full.csv",
+            mime="text/csv"
+        )
+
+        st.download_button(
+            label="Download Summary CSV",
+            data=summary_df.to_csv(index=False).encode("utf-8"),
+            file_name="wc_aviation_impact_summary.csv",
+            mime="text/csv"
+        )
