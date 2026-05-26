@@ -375,7 +375,7 @@ if st.button("Generate Dashboard"):
                         "Cell Text": cell_text,
                         "TAF_Wind": taf_wind,
                         "TAF_Vis": taf_vis,
-                        "TAF_WX": taf_wx
+                        "TAF_WX": taf_wx,
                         "Primary Driver": primary_driver,
                         "Valid Datetime": valid_time if init_dt else None,
                         "Forecast Hour": int(fhr),
@@ -462,7 +462,7 @@ if st.button("Generate Dashboard"):
                     "Max Impact Level": max_impact
                 })
 
-            summary_df = pd.DataFrame(summary_rows)
+          summary_df = pd.DataFrame(summary_rows)
 
             st.dataframe(
                 summary_df.drop(columns=["Max Impact Level"]),
@@ -470,62 +470,75 @@ if st.button("Generate Dashboard"):
                 hide_index=True
             )
 
-        def build_dss_summary(summary_df, selected_preset, time_window):
-            if summary_df.empty:
-                return "No significant aviation weather impacts are indicated in the selected NBM guidance window."
+            def build_dss_summary(summary_df, selected_preset, time_window):
+                if summary_df.empty:
+                    return "No significant aviation weather impacts are indicated in the selected NBM guidance window."
 
-            high = summary_df[summary_df["Max Impact Level"] == 3]
-            med = summary_df[summary_df["Max Impact Level"] == 2]
-            low = summary_df[summary_df["Max Impact Level"] == 1]
+                high = summary_df[summary_df["Max Impact Level"] == 3]
+                med = summary_df[summary_df["Max Impact Level"] == 2]
+                low = summary_df[summary_df["Max Impact Level"] == 1]
 
-            lines = []
-            site_name = selected_preset.replace("WC Site - ", "")
+                lines = []
+                site_name = selected_preset.replace("WC Site - ", "")
 
-            lines.append(f"{site_name} Aviation Outlook – {time_window}")
-            lines.append("")
-            lines.append("Key Messages:")
+                lines.append(f"{site_name} Aviation Outlook – {time_window}")
+                lines.append("")
+                lines.append("Key Messages:")
 
-            if not high.empty:
-                stations = ", ".join(high["Station"].tolist())
-                hazards = ", ".join(high["Primary Concern"].unique().tolist())
-                lines.append(f"• High aviation impacts are possible at {stations}, mainly due to {hazards}.")
-            if not med.empty:
-                stations = ", ".join(med["Station"].tolist())
-                hazards = ", ".join(med["Primary Concern"].unique().tolist())
-                lines.append(f"• Medium aviation impacts are possible at {stations}, mainly due to {hazards}.")
-            if not low.empty and high.empty:
-                stations = ", ".join(low["Station"].tolist())
-                lines.append(f"• Low-end aviation impacts are possible at {stations}; monitor later guidance for trends.")
-            if high.empty and med.empty and low.empty:
-                lines.append("• Little to no aviation weather impacts are indicated in the selected period.")
+                if not high.empty:
+                    stations = ", ".join(high["Station"].tolist())
+                    hazards = ", ".join(high["Primary Concern"].unique().tolist())
+                    lines.append(f"• High aviation impacts are possible at {stations}, mainly due to {hazards}.")
 
-            lines.append("")
-            lines.append("Operational Notes:")
-            lines.append("• This guidance is based on NBM terminal data and should be reviewed by a forecaster before partner dissemination.")
-            lines.append("• Use CWSU/WFO coordination for final operational messaging, especially for convection and traffic-flow impacts.")
+                if not med.empty:
+                    stations = ", ".join(med["Station"].tolist())
+                    hazards = ", ".join(med["Primary Concern"].unique().tolist())
+                    lines.append(f"• Medium aviation impacts are possible at {stations}, mainly due to {hazards}.")
 
-            return "\n".join(lines)
+                if not low.empty and high.empty:
+                    stations = ", ".join(low["Station"].tolist())
+                    lines.append(f"• Low-end aviation impacts are possible at {stations}; monitor later guidance for trends.")
 
-        dss_text = build_dss_summary(summary_df, selected_preset, time_window)
+                if high.empty and med.empty and low.empty:
+                    lines.append("• Little to no aviation weather impacts are indicated in the selected period.")
 
-        st.subheader("DSS Builder Text Draft")
-        st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=220)
-            
+                lines.append("")
+                lines.append("Operational Notes:")
+                lines.append("• This guidance is based on NBM terminal data and should be reviewed by a forecaster before partner dissemination.")
+                lines.append("• Use CWSU/WFO coordination for final operational messaging, especially for convection and traffic-flow impacts.")
+
+                return "\n".join(lines)
+
+            dss_text = build_dss_summary(summary_df, selected_preset, time_window)
+
+            st.subheader("DSS Builder Text Draft")
+            st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=220)
+
             # --- PLOTLY VISUALIZATION ---
             st.subheader("Terminal Impact Matrix (Experimental NBM Guidance)")
-            
-            # FIXED: Reindex the pivots to ensure they match the user's exact input list (valid_icaos)
-            impact_data = df_view.pivot(index="Station", columns="Zulu Time", values="Impact Level")
-            impact_data = impact_data.reindex(valid_icaos)[df_view["Zulu Time"].unique().tolist()]
+
             valid_view_icaos = [icao for icao in valid_icaos if icao in df_view["Station"].unique()]
+            ordered_times = df_view["Zulu Time"].drop_duplicates().tolist()
 
-            cell_text_data = df.pivot(index="Station", columns="Zulu Time", values="Cell Text")
-            cell_text_data = cell_text_data.reindex(valid_icaos)[df_view["Zulu Time"].unique().tolist()]
+            impact_data = (
+                df_view.pivot(index="Station", columns="Zulu Time", values="Impact Level")
+                .reindex(valid_view_icaos)
+                .reindex(columns=ordered_times)
+            )
 
-            hover_data = df.pivot(index="Station", columns="Zulu Time", values="Flight Category")
-            hover_data = hover_data.reindex(valid_icaos)[df["Zulu Time"].unique().tolist()]
+            cell_text_data = (
+                df_view.pivot(index="Station", columns="Zulu Time", values="Cell Text")
+                .reindex(valid_view_icaos)
+                .reindex(columns=ordered_times)
+            )
 
-            for i, row in df_view.iterrows():
+            hover_data = (
+                df_view.pivot(index="Station", columns="Zulu Time", values="Flight Category")
+                .reindex(valid_view_icaos)
+                .reindex(columns=ordered_times)
+            )
+
+            for _, row in df_view.iterrows():
                 hover_data.loc[row["Station"], row["Zulu Time"]] = (
                     f"<b>Valid: {row['Zulu Time']}</b><br>"
                     f"<b>{row['Flight Category']}</b><br>"
@@ -534,81 +547,115 @@ if st.button("Generate Dashboard"):
                     f"WX: {row['Weather']}<br>"
                     f"Wind: {row['Wind']}<br>"
                     f"LLWS: {row['LLWS']}<br>"
-                    f"Turb: {row['Turbulence']}"
+                    f"Turb: {row['Turbulence']}<br>"
+                    f"Primary Driver: {row['Primary Driver']}"
                 )
 
             colorscale = [
-                [0.0, "#2b2b2b"], [0.33, "#e5e500"], [0.66, "#ff9900"], [1.0, "#ff4c4c"]  
+                [0.0, "#2b2b2b"],
+                [0.33, "#e5e500"],
+                [0.66, "#ff9900"],
+                [1.0, "#ff4c4c"],
             ]
 
-            plot_height = max(350, len(valid_icaos) * 120 + 100)
+            plot_height = max(350, len(valid_view_icaos) * 120 + 100)
 
             fig = go.Figure(data=go.Heatmap(
-                z=impact_data.values, 
-                x=impact_data.columns, 
+                z=impact_data.values,
+                x=impact_data.columns,
                 y=impact_data.index,
                 text=cell_text_data.values,
-                texttemplate="%{text}",    
-                textfont={"size": 11},     
+                texttemplate="%{text}",
+                textfont={"size": 11},
                 hovertext=hover_data.values,
                 hoverinfo="text",
-                colorscale=colorscale, 
+                colorscale=colorscale,
                 showscale=False,
-                zmin=0, zmax=3, 
-                xgap=2, ygap=2  
+                zmin=0,
+                zmax=3,
+                xgap=2,
+                ygap=2
             ))
 
-            legend_items = {"None": "#2b2b2b", "Slight": "#e5e500", "Moderate": "#ff9900", "High": "#ff4c4c"}
+            legend_items = {
+                "None": "#2b2b2b",
+                "Low": "#e5e500",
+                "Medium": "#ff9900",
+                "High": "#ff4c4c",
+            }
+
             for label, color in legend_items.items():
                 fig.add_trace(go.Scatter(
-                    x=[None], y=[None], mode="markers",
-                    marker=dict(size=15, color=color, symbol="square"), name=label
+                    x=[None],
+                    y=[None],
+                    mode="markers",
+                    marker=dict(size=15, color=color, symbol="square"),
+                    name=label
                 ))
 
             fig.update_layout(
-                yaxis=dict(autorange="reversed"), # FIXED: Forces Plotly to draw top-down instead of bottom-up
-                plot_bgcolor="white", height=plot_height, margin=dict(l=10, r=10, t=10, b=10),
-                legend=dict(title="<b>Impact Level</b>", yanchor="top", y=1, xanchor="left", x=1.02, bgcolor="rgba(255,255,255,0.8)", bordercolor="black", borderwidth=1)
+                yaxis=dict(autorange="reversed"),
+                plot_bgcolor="white",
+                height=plot_height,
+                margin=dict(l=10, r=10, t=10, b=10),
+                legend=dict(
+                    title="<b>Impact Level</b>",
+                    yanchor="top",
+                    y=1,
+                    xanchor="left",
+                    x=1.02,
+                    bgcolor="rgba(255,255,255,0.8)",
+                    bordercolor="black",
+                    borderwidth=1,
+                )
             )
 
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- AUTOMATED TAF GENERATOR ---
-            st.subheader("Experimental NBM TAF Guidance")
-            st.caption("Not an official TAF. Use for situational awareness and forecaster review only.")
-            issue_time = init_dt.strftime("%d%H%M") + "Z" if init_dt else "UNKNOWN"
+            # --- DOWNLOADS ---
+            st.subheader("Downloads")
 
+            col_dl1, col_dl2 = st.columns(2)
+
+            with col_dl1:
+                st.download_button(
+                    label="Download Full Parsed Data CSV",
+                    data=df.to_csv(index=False).encode("utf-8"),
+                    file_name="nbm_terminal_guidance_full.csv",
+                    mime="text/csv"
+                )
+
+            with col_dl2:
+                st.download_button(
+                    label="Download Summary CSV",
+                    data=summary_df.to_csv(index=False).encode("utf-8"),
+                    file_name="wc_aviation_impact_summary.csv",
+                    mime="text/csv"
+                )
+
+            # --- AUTOMATED TAF GENERATOR ---
+            st.subheader("Experimental NBM Terminal Trend Guidance")
+            st.caption("Not an official TAF. Use for situational awareness and forecaster review only.")
+
+            issue_time = init_dt.strftime("%d%H%M") + "Z" if init_dt else "UNKNOWN"
             taf_output_str = ""
 
             for ICAO in valid_icaos:
-                station_df = df[df['Station'] == ICAO]
-                if station_df.empty: continue
-                    
+                station_df = df[df["Station"] == ICAO]
+                if station_df.empty:
+                    continue
+
                 taf_output_str += f"TAF {ICAO} {issue_time}\n"
                 prev_taf_line = ""
 
-                for i, row in station_df.iterrows():
+                for _, row in station_df.iterrows():
                     conditions = f"{row['TAF_Wind']} {row['TAF_Vis']} {row['TAF_WX']} {row['Clouds']}".strip()
                     conditions = " ".join(conditions.split())
-                    
+
                     if conditions != prev_taf_line:
                         taf_output_str += f"  FM{row['FM Time']} {conditions}\n"
                         prev_taf_line = conditions
-                
+
                 taf_output_str += "\n"
 
             st.code(taf_output_str, language="text")
-
-        st.download_button(
-            label="Download Full Parsed Data CSV",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name="nbm_terminal_guidance_full.csv",
-            mime="text/csv"
-        )
-
-        st.download_button(
-            label="Download Summary CSV",
-            data=summary_df.to_csv(index=False).encode("utf-8"),
-            file_name="wc_aviation_impact_summary.csv",
-            mime="text/csv"
-        )
