@@ -7,6 +7,19 @@ from datetime import datetime, timedelta, timezone
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="NBM Aviation Dashboard", layout="wide")
+
+st.markdown("""
+<style>
+    .stApp { background-color: #1e3050; }
+    h1, h2, h3, .stMarkdown p, label, .stCaption { color: #d6e4f0 !important; }
+    .stDataFrame { background-color: #162840; }
+    .stTextArea textarea { background-color: #162840; color: #d6e4f0; }
+    .stCode { background-color: #162840; }
+    div[data-testid="stSelectbox"] label,
+    div[data-testid="stCheckbox"] label { color: #d6e4f0 !important; }
+</style>
+""", unsafe_allow_html=True)
+
 st.title("✈️ NBM Terminal Weather Dashboard")
 st.markdown("Pulling live, unparsed 60-hour guidance directly from the NOAA NOMADS supercomputer.")
 
@@ -102,7 +115,7 @@ def impact_label(level):
 
 def impact_color(level):
     colors = {
-        0: "#2b2b2b",
+        0: "#27ae60",
         1: "#e5e500",
         2: "#ff9900",
         3: "#ff4c4c"
@@ -561,7 +574,7 @@ if 'df' in st.session_state:
         )
 
     colorscale = [
-        [0.0, "#2b2b2b"],
+        [0.0, "#27ae60"],
         [0.33, "#e5e500"],
         [0.66, "#ff9900"],
         [1.0, "#ff4c4c"],
@@ -587,7 +600,7 @@ if 'df' in st.session_state:
     ))
 
     legend_items = {
-        "None": "#2b2b2b",
+        "None": "#27ae60",
         "Low": "#e5e500",
         "Medium": "#ff9900",
         "High": "#ff4c4c",
@@ -604,7 +617,9 @@ if 'df' in st.session_state:
 
     fig.update_layout(
         yaxis=dict(autorange="reversed"),
-        plot_bgcolor="white",
+        plot_bgcolor="#162840",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#d6e4f0"),
         height=plot_height,
         margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(
