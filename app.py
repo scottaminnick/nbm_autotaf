@@ -16,19 +16,7 @@ st.markdown("Pulling live, unparsed 60-hour guidance directly from the NOAA NOMA
 # You can add as many presets as you want here! Just follow the "Name": "ICAO1, ICAO2" format.
 PRESETS = {
     "Custom (Type your own)": "",
-    "WC Site - All Sites": (
-        "KATL, KFTY, KPDK, KMGE, KRYY, "
-        "KBOS, KPVD, KMHT, KBED, "
-        "KDFW, KDAL, KAFW, KFTW, KNFW, KGKY, "
-        "KIAH, KHOU, KSGR, KEFD, KLBX, KGLS, KLVJ, KDWH, "
-        "KMCI, KMKC, KIXD, KTOP, KFOE, "
-        "KLAX, KBUR, KLGB, KSNA, KONT, KVNY, KSMO, KSLI, KSBD, KRIV, "
-        "KMIA, KFLL, KFXE, KPBI, KOPF, KHWO, KTMB, KHST, "
-        "KEWR, KJFK, KLGA, KTEB, KHPN, KISP, "
-        "KPHL, KPNE, KILG, KTTN, "
-        "KSFO, KSJC, KOAK, KHAF, KLVK, "
-        "KSEA, KBFI, KPAE, KPWT, KTCM, KGRF, KOLM"
-    ),
+    "WC Site - All Sites": "KATL, KBOS, KDFW, KIAH, KMCI, KLAX, KMIA, KEWR, KPHL, KSFO, KSEA",
     "WC Site - Atlanta": "KATL, KFTY, KPDK, KMGE, KRYY",
     "WC Site - Boston": "KBOS, KPVD, KMHT, KBED",
     "WC Site - Dallas": "KDFW, KDAL, KAFW, KFTW, KNFW, KGKY",
