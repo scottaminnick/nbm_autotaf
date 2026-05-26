@@ -16,6 +16,19 @@ st.markdown("Pulling live, unparsed 60-hour guidance directly from the NOAA NOMA
 # You can add as many presets as you want here! Just follow the "Name": "ICAO1, ICAO2" format.
 PRESETS = {
     "Custom (Type your own)": "",
+    "WC Site - All Sites": (
+        "KATL, KFTY, KPDK, KMGE, KRYY, "
+        "KBOS, KPVD, KMHT, KBED, "
+        "KDFW, KDAL, KAFW, KFTW, KNFW, KGKY, "
+        "KIAH, KHOU, KSGR, KEFD, KLBX, KGLS, KLVJ, KDWH, "
+        "KMCI, KMKC, KIXD, KTOP, KFOE, "
+        "KLAX, KBUR, KLGB, KSNA, KONT, KVNY, KSMO, KSLI, KSBD, KRIV, "
+        "KMIA, KFLL, KFXE, KPBI, KOPF, KHWO, KTMB, KHST, "
+        "KEWR, KJFK, KLGA, KTEB, KHPN, KISP, "
+        "KPHL, KPNE, KILG, KTTN, "
+        "KSFO, KSJC, KOAK, KHAF, KLVK, "
+        "KSEA, KBFI, KPAE, KPWT, KTCM, KGRF, KOLM"
+    ),
     "WC Site - Atlanta": "KATL, KFTY, KPDK, KMGE, KRYY",
     "WC Site - Boston": "KBOS, KPVD, KMHT, KBED",
     "WC Site - Dallas": "KDFW, KDAL, KAFW, KFTW, KNFW, KGKY",
@@ -641,29 +654,30 @@ if 'df' in st.session_state:
             mime="text/csv"
         )
 
-    # --- AUTOMATED TAF GENERATOR ---
-    st.subheader("Experimental NBM Terminal Trend Guidance")
-    st.caption("Not an official TAF. Use for situational awareness and forecaster review only.")
+    # --- AUTOMATED TAF GENERATOR (not shown for All Sites) ---
+    if selected_preset != "WC Site - All Sites":
+        st.subheader("Experimental NBM Terminal Trend Guidance")
+        st.caption("Not an official TAF. Use for situational awareness and forecaster review only.")
 
-    issue_time = init_dt.strftime("%d%H%M") + "Z" if init_dt else "UNKNOWN"
-    taf_output_str = ""
+        issue_time = init_dt.strftime("%d%H%M") + "Z" if init_dt else "UNKNOWN"
+        taf_output_str = ""
 
-    for ICAO in valid_icaos:
-        station_df = df[df["Station"] == ICAO]
-        if station_df.empty:
-            continue
+        for ICAO in valid_icaos:
+            station_df = df[df["Station"] == ICAO]
+            if station_df.empty:
+                continue
 
-        taf_output_str += f"TAF {ICAO} {issue_time}\n"
-        prev_taf_line = ""
+            taf_output_str += f"TAF {ICAO} {issue_time}\n"
+            prev_taf_line = ""
 
-        for _, row in station_df.iterrows():
-            conditions = f"{row['TAF_Wind']} {row['TAF_Vis']} {row['TAF_WX']} {row['Clouds']}".strip()
-            conditions = " ".join(conditions.split())
+            for _, row in station_df.iterrows():
+                conditions = f"{row['TAF_Wind']} {row['TAF_Vis']} {row['TAF_WX']} {row['Clouds']}".strip()
+                conditions = " ".join(conditions.split())
 
-            if conditions != prev_taf_line:
-                taf_output_str += f"  FM{row['FM Time']} {conditions}\n"
-                prev_taf_line = conditions
+                if conditions != prev_taf_line:
+                    taf_output_str += f"  FM{row['FM Time']} {conditions}\n"
+                    prev_taf_line = conditions
 
-        taf_output_str += "\n"
+            taf_output_str += "\n"
 
-    st.code(taf_output_str, language="text")
+        st.code(taf_output_str, language="text")
