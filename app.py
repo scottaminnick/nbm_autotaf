@@ -462,7 +462,7 @@ if st.button("Generate Dashboard"):
                     "Max Impact Level": max_impact
                 })
 
-          summary_df = pd.DataFrame(summary_rows)
+            summary_df = pd.DataFrame(summary_rows)
 
             st.dataframe(
                 summary_df.drop(columns=["Max Impact Level"]),
