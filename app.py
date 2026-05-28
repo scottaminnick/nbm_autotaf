@@ -28,7 +28,7 @@ st.markdown("Pulling live NBS text guidance (~72 hours) directly from the NOAA N
 # ==========================================
 PRESETS = {
     "Custom (Type your own)": "",
-    "WC Site - All Sites": "KBOS, KEWR, KPHL, KATL, KMIA, KMCI, KDFW, KIAH, KLAX, KSFO, KSEA",
+    "WC Site - All Sites": "KATL, KBOS, KDFW, KIAH, KMCI, KLAX, KMIA, KEWR, KPHL, KSFO, KSEA",
     "WC Site - Atlanta": "KATL, KFTY, KPDK, KMGE, KRYY",
     "WC Site - Boston": "KBOS, KPVD, KMHT, KBED",
     "WC Site - Dallas": "KDFW, KDAL, KAFW, KFTW, KNFW, KGKY",
@@ -50,11 +50,22 @@ def deg_to_cardinal(d):
     dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"]
     return dirs[round(d / 22.5) % 16]
 
-def get_flight_category(cig_ft, vis_sm):
-    if cig_ft < 500  or vis_sm < 1.0: return "LIFR"
-    elif cig_ft < 1000 or vis_sm < 3.0: return "IFR"
-    elif cig_ft <= 3000 or vis_sm <= 5.0: return "MVFR"
-    else: return "VFR"
+def get_flight_category(cig_ft, vis_sm, sky_pct=100):
+    # A ceiling requires BKN (>50%) or OVC sky coverage.
+    # SCT/FEW layers are NOT ceilings — flight category for those periods is vis-only.
+    sky = int(sky_pct) if sky_pct else 100
+    has_ceiling = sky > 50
+
+    if has_ceiling:
+        if cig_ft < 500  or vis_sm < 1.0: return "LIFR"
+        if cig_ft < 1000 or vis_sm < 3.0: return "IFR"
+        if cig_ft <= 3000 or vis_sm <= 5.0: return "MVFR"
+    else:
+        # No ceiling — evaluate on visibility alone
+        if vis_sm < 1.0:  return "LIFR"
+        if vis_sm < 3.0:  return "IFR"
+        if vis_sm <= 5.0: return "MVFR"
+    return "VFR"
 
 def get_cloud_coverage(sky_pct, raw_cig, raw_lcb):
     sky = int(sky_pct) if sky_pct else 0
@@ -112,16 +123,23 @@ def impact_label(level):
 def impact_color(level):
     return {0:"#27ae60", 1:"#e5e500", 2:"#ff9900", 3:"#ff4c4c"}.get(level, "#cccccc")
 
-def get_primary_driver(cig_ft, vis_sm, taf_wx, wsp, gst):
+def get_primary_driver(cig_ft, vis_sm, taf_wx, wsp, gst, sky_pct=100):
     """Returns the top aviation impact driver for a given forecast period."""
+    sky = int(sky_pct) if sky_pct else 100
+    has_ceiling = sky > 50
+
     drivers = []
     if "TS" in taf_wx or "VCTS" in taf_wx:  drivers.append(("Thunderstorms", 4))
     if any(t in taf_wx for t in ["FZRA","FZDZ"]): drivers.append(("Freezing precip", 4))
     if any(t in taf_wx for t in ["SN","PL"]):     drivers.append(("Wintry precip", 3))
 
-    if   cig_ft < 1000:              drivers.append(("IFR/LIFR ceilings", 4))
-    elif cig_ft < 3000:              drivers.append(("MVFR ceilings", 2))
-    elif cig_ft < 5000:              drivers.append(("Low VFR ceilings", 1))
+    if has_ceiling:
+        if   cig_ft < 1000: drivers.append(("IFR/LIFR ceilings", 4))
+        elif cig_ft < 3000: drivers.append(("MVFR ceilings", 2))
+        elif cig_ft < 5000: drivers.append(("Low VFR ceilings", 1))
+    else:
+        # SCT/FEW layer at a concerning height — flag as a watch, not a ceiling impact
+        if cig_ft < 3000:   drivers.append(("Near-ceiling SCT layer", 1))
 
     if   vis_sm < 3:                 drivers.append(("IFR/LIFR visibility", 4))
     elif vis_sm < 5:                 drivers.append(("MVFR visibility", 2))
@@ -133,18 +151,33 @@ def get_primary_driver(cig_ft, vis_sm, taf_wx, wsp, gst):
     drivers.sort(key=lambda x: x[1], reverse=True)
     return drivers[0][0]
 
-def get_impact_level(cig_ft, vis_sm, wx, wsp, gst):
-    """Impact level 0–3 based on ceiling, visibility, weather, and surface winds."""
+def get_impact_level(cig_ft, vis_sm, wx, wsp, gst, sky_pct=100):
+    """Impact level 0–3. Ceiling-based levels require BKN/OVC (a true ceiling).
+    SCT/FEW layers at concerning heights are capped at level 1 — yellow watch —
+    because they're one step from becoming a ceiling but aren't one yet."""
+    sky = int(sky_pct) if sky_pct else 100
+    has_ceiling = sky > 50   # BKN or OVC
+
     thunder  = ("TS" in wx) or ("VCTS" in wx)
     freezing = any(t in wx for t in ["FZRA","FZDZ"])
     winter   = any(t in wx for t in ["SN","PL","RAPL","SNPL","SHSN","SG"])
 
-    if cig_ft < 1000 or vis_sm < 3 or wsp >= 30 or gst >= 35 or freezing or winter or thunder:
-        return 3
-    if (1000 <= cig_ft < 3000) or (3 <= vis_sm < 5) or (20 <= wsp < 30) or (25 <= gst < 35):
-        return 2
-    if 3000 <= cig_ft < 5000:
-        return 1
+    # Level 3 — weather/wind triggers are independent of ceiling type
+    if thunder or freezing or winter:       return 3
+    if has_ceiling and cig_ft < 1000:       return 3
+    if vis_sm < 3:                          return 3
+    if wsp >= 30 or gst >= 35:             return 3
+
+    # Level 2
+    if has_ceiling and 1000 <= cig_ft < 3000: return 2
+    if 3 <= vis_sm < 5:                       return 2
+    if 20 <= wsp < 30 or 25 <= gst < 35:     return 2
+
+    # Level 1
+    if has_ceiling and 3000 <= cig_ft < 5000: return 1
+    # SCT/FEW layer at a height that would trigger MVFR or worse if BKN → watch
+    if not has_ceiling and cig_ft < 3000:     return 1
+
     return 0
 
 def build_dss_summary(summary_df, selected_preset, time_window):
@@ -311,9 +344,9 @@ if st.button("Generate Dashboard"):
                         cell_wind = f"{cardinal} {wsp}G{gst}" if gst else f"{cardinal} {wsp}"
 
                     # --- Impact and flight category ---
-                    flight_cat     = get_flight_category(cig_ft, vis_sm)
-                    impact_lvl     = get_impact_level(cig_ft, vis_sm, taf_wx, wsp, gst)
-                    primary_driver = get_primary_driver(cig_ft, vis_sm, taf_wx, wsp, gst)
+                    flight_cat     = get_flight_category(cig_ft, vis_sm, sky_pct)
+                    impact_lvl     = get_impact_level(cig_ft, vis_sm, taf_wx, wsp, gst, sky_pct)
+                    primary_driver = get_primary_driver(cig_ft, vis_sm, taf_wx, wsp, gst, sky_pct)
 
                     cell_wx   = taf_wx if taf_wx else "--"
                     cell_text = f"<b>{flight_cat}</b><br>{cell_wx}<br>{cell_wind}"
