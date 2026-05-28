@@ -462,6 +462,7 @@ if 'df' in st.session_state:
             marker=dict(size=15, color=color, symbol="square"), name=label
         ))
     fig.update_layout(
+        xaxis=dict(side="top"),
         yaxis=dict(autorange="reversed"),
         plot_bgcolor="#162840", paper_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#d6e4f0"), height=plot_height,
@@ -472,6 +473,37 @@ if 'df' in st.session_state:
             bordercolor="black", borderwidth=1,
         )
     )
+    # Highlight Day 2 and Day 3 columns when the full 72-hr window is displayed.
+    # Each box is a transparent-fill rect with a colored border so cell colors
+    # still read through. Day 2 = blue, Day 3 = gold.
+    if time_window == "Full 72-hr NBM":
+        time_fhr_map = (
+            df_view[["Zulu Time", "Forecast Hour"]]
+            .drop_duplicates("Zulu Time")
+            .set_index("Zulu Time")["Forecast Hour"]
+            .to_dict()
+        )
+        for _label, fhr_min, fhr_max, color in [
+            ("Day 2", 24, 48, "rgba(100,180,255,0.9)"),
+            ("Day 3", 48, 72, "rgba(255,200,50,0.9)"),
+        ]:
+            indices = [
+                i for i, t in enumerate(ordered_times)
+                if fhr_min < time_fhr_map.get(t, 0) <= fhr_max
+            ]
+            if not indices:
+                continue
+            fig.add_shape(
+                type="rect",
+                xref="x", yref="paper",
+                x0=min(indices) - 0.5,
+                x1=max(indices) + 0.5,
+                y0=0, y1=1,
+                line=dict(color=color, width=2.5),
+                fillcolor="rgba(0,0,0,0)",
+                layer="above",
+            )
+
     st.plotly_chart(fig, use_container_width=True)
 
     # --- Downloads ---
