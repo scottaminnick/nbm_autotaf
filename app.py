@@ -28,7 +28,7 @@ st.markdown("Pulling live NBS text guidance (~72 hours) directly from the NOAA N
 # ==========================================
 PRESETS = {
     "Custom (Type your own)": "",
-    "WC Site - All Sites": "KATL, KBOS, KDFW, KIAH, KMCI, KLAX, KMIA, KEWR, KPHL, KSFO, KSEA",
+    "WC Site - All Sites": "KBOS, KEWR, KPHL, KATL, KMIA, KMCI, KDFW, KIAH, KLAX, KSFO, KSEA",
     "WC Site - Atlanta": "KATL, KFTY, KPDK, KMGE, KRYY",
     "WC Site - Boston": "KBOS, KPVD, KMHT, KBED",
     "WC Site - Dallas": "KDFW, KDAL, KAFW, KFTW, KNFW, KGKY",
