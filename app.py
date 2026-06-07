@@ -5,6 +5,10 @@ import plotly.graph_objects as go
 import re
 from datetime import datetime, timedelta, timezone
 
+# Slide-1 narrative + Slide-2 coordination-need helpers live in dss_narrative.py
+# (must be deployed alongside this file — commit it to your repo).
+from dss_narrative import build_dss_narrative, build_icao_region_map, coordination_products
+
 # --- PAGE SETUP ---
 st.set_page_config(page_title="NBM Aviation Dashboard", layout="wide")
 
@@ -41,6 +45,9 @@ PRESETS = {
     "WC Site - Santa Clara": "KSFO, KSJC, KOAK, KHAF, KLVK",
     "WC Site - Seattle": "KSEA, KBFI, KPAE, KPWT, KTCM, KGRF, KOLM",
 }
+
+# Build ICAO -> coordination-region lookup once from the presets above.
+REGION_MAP = build_icao_region_map(PRESETS)
 
 # ==========================================
 # HELPER FUNCTIONS
@@ -118,7 +125,8 @@ def get_weather(pra, psn, pzr, t03, p06="0"):
     return "None", ""
 
 def impact_label(level):
-    return {0:"Little/No Impact", 1:"Low Impact", 2:"Medium Impact", 3:"High Impact"}.get(level, "Unknown")
+    # Aligned to the briefing's slide vocabulary (None / Minor / Moderate / Major).
+    return {0:"None", 1:"Minor", 2:"Moderate", 3:"Major"}.get(level, "Unknown")
 
 def impact_color(level):
     return {0:"#27ae60", 1:"#e5e500", 2:"#ff9900", 3:"#ff4c4c"}.get(level, "#cccccc")
@@ -179,41 +187,6 @@ def get_impact_level(cig_ft, vis_sm, wx, wsp, gst, sky_pct=100):
     if not has_ceiling and cig_ft < 3000:     return 1
 
     return 0
-
-def build_dss_summary(summary_df, selected_preset, time_window):
-    if summary_df.empty:
-        return "No significant aviation weather impacts are indicated in the selected NBM guidance window."
-
-    high = summary_df[summary_df["Max Impact Level"] == 3]
-    med  = summary_df[summary_df["Max Impact Level"] == 2]
-    low  = summary_df[summary_df["Max Impact Level"] == 1]
-
-    lines = []
-    site_name = selected_preset.replace("WC Site - ", "")
-    lines.append(f"{site_name} Aviation Outlook – {time_window}")
-    lines.append("")
-    lines.append("Key Messages:")
-
-    if not high.empty:
-        stations = ", ".join(high["Station"].tolist())
-        hazards  = ", ".join(high["Primary Concern"].unique().tolist())
-        lines.append(f"• High aviation impacts are possible at {stations}, mainly due to {hazards}.")
-    if not med.empty:
-        stations = ", ".join(med["Station"].tolist())
-        hazards  = ", ".join(med["Primary Concern"].unique().tolist())
-        lines.append(f"• Medium aviation impacts are possible at {stations}, mainly due to {hazards}.")
-    if not low.empty and high.empty:
-        stations = ", ".join(low["Station"].tolist())
-        lines.append(f"• Low-end aviation impacts are possible at {stations}; monitor later guidance for trends.")
-    if high.empty and med.empty and low.empty:
-        lines.append("• Little to no aviation weather impacts are indicated in the selected period.")
-
-    lines.append("")
-    lines.append("Operational Notes:")
-    lines.append("• This guidance is based on NBM NBS text data and should be reviewed by a forecaster before partner dissemination.")
-    lines.append("• Use CWSU/WFO coordination for final operational messaging, especially for convection and traffic-flow impacts.")
-
-    return "\n".join(lines)
 
 # ==========================================
 # 2. DATA RETRIEVAL
@@ -441,15 +414,17 @@ if 'df' in st.session_state:
             "Max Impact Level": max_impact,
         })
     summary_df = pd.DataFrame(summary_rows)
+    # Deterministic hazard -> coordination products (Slide-2 'Coordination Need').
+    summary_df["Coordination Need"] = summary_df["Primary Concern"].apply(coordination_products)
     st.dataframe(
         summary_df.drop(columns=["Max Impact Level"]),
         use_container_width=True, hide_index=True
     )
 
-    # --- DSS Builder text ---
-    dss_text = build_dss_summary(summary_df, selected_preset, time_window)
+    # --- DSS Builder text (Slide-1 narrative draft) ---
+    dss_text = build_dss_narrative(summary_df, REGION_MAP, selected_preset, time_window)
     st.subheader("DSS Builder Text Draft")
-    st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=220)
+    st.text_area("Copy/edit this text for DSS Builder:", dss_text, height=320)
 
     # --- Impact matrix heatmap ---
     st.subheader("Terminal Impact Matrix (NBS Guidance)")
@@ -489,7 +464,8 @@ if 'df' in st.session_state:
         hovertext=hover_data.values, hoverinfo="text",
         colorscale=colorscale, showscale=False, zmin=0, zmax=3, xgap=2, ygap=2
     ))
-    for label, color in {"None":"#27ae60","Low":"#e5e500","Medium":"#ff9900","High":"#ff4c4c"}.items():
+    # Legend labels aligned to the briefing vocabulary (None / Minor / Moderate / Major).
+    for label, color in {"None":"#27ae60","Minor":"#e5e500","Moderate":"#ff9900","Major":"#ff4c4c"}.items():
         fig.add_trace(go.Scatter(
             x=[None], y=[None], mode="markers",
             marker=dict(size=15, color=color, symbol="square"), name=label
