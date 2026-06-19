@@ -379,16 +379,32 @@ if 'df' in st.session_state:
     window_start_hr, window_end_hr = None, None
     if time_window in ("Day 2 (12Z–12Z)", "Day 3 (12Z–12Z)"):
         default_start, default_end = (24, 48) if time_window.startswith("Day 2") else (48, 72)
-        hr_col1, hr_col2 = st.columns(2)
+        hr_col1, hr_col2, hr_col3 = st.columns([1, 1, 2])
         with hr_col1:
             window_start_hr = st.number_input(
-                f"{time_window} – Start (Forecast Hour)",
-                min_value=0, max_value=72, value=default_start, step=1
+                "Start (Forecast Hour)",
+                min_value=0, max_value=72, value=default_start, step=1,
+                key=f"{time_window}_start"
             )
         with hr_col2:
             window_end_hr = st.number_input(
-                f"{time_window} – End (Forecast Hour)",
-                min_value=0, max_value=72, value=default_end, step=1
+                "End (Forecast Hour)",
+                min_value=0, max_value=72, value=default_end, step=1,
+                key=f"{time_window}_end"
+            )
+        with hr_col3:
+            if init_dt:
+                start_valid = (init_dt + timedelta(hours=int(window_start_hr))).strftime("%b %d, %H00Z")
+                end_valid   = (init_dt + timedelta(hours=int(window_end_hr))).strftime("%b %d, %H00Z")
+            else:
+                start_valid = f"FHR {int(window_start_hr)}"
+                end_valid   = f"FHR {int(window_end_hr)}"
+            st.markdown(
+                f"<div style='padding-top:28px; color:#d6e4f0;'>"
+                f"<span style='font-size:0.8rem; opacity:0.7;'>Selected Window</span><br>"
+                f"<span style='font-size:1rem; font-weight:600;'>{start_valid} → {end_valid}</span>"
+                f"</div>",
+                unsafe_allow_html=True
             )
 
     df_view = df.copy()
